@@ -21,7 +21,7 @@ jobs:
       - name: Copy widget files to main site repo
         run: |
           mkdir -p site-repo/public/widget
-          cp config.js iframe.html script.js widget.js site-repo/public/widget/
+          cp -r *.js *.html assets/ site-repo/public/widget/
 
       - name: Commit and push changes to main site
         run: |
