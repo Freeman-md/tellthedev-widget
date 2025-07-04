@@ -1,0 +1,31 @@
+name: Deploy Widget to Main Site
+
+on:
+  push:
+    branches: [main]  # or whichever branch you use
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout widget repo
+        uses: actions/checkout@v3
+
+      - name: Clone main site repo
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git clone https://x-access-token:${{ secrets.MAIN_SITE_TOKEN }}@github.com/Freeman-md/tellthedev.git site-repo
+
+      - name: Copy widget files to main site repo
+        run: |
+          mkdir -p site-repo/public/widget
+          cp config.js iframe.html script.js widget.js site-repo/public/widget/
+
+      - name: Commit and push changes to main site
+        run: |
+          cd site-repo
+          git add public/widget/
+          git commit -m "🔄 Auto-update widget files from widget repo" || echo "No changes to commit"
+          git push origin main
