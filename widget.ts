@@ -1,15 +1,15 @@
-declare const imageCompression: any;
+import { config } from "./config.js";
 
-let _formState: 'idle' | 'loading' | 'success' | 'error' = 'idle'
-let projectId: string | null = "8d62d581-6853-49be-b788-e317c297509e";
-let selectedType: 'bug' | 'feature' | 'general' | null = null;
+let _formState: 'idle' | 'loading' | 'success' | 'error' = 'idle';
+let apiKey: string | null = null;
+let selectedType: 'bug' | 'idea' | 'praise' | 'general' | null = null;
 
 window.addEventListener('message', (event) => {
   const { data } = event;
 
-  if (data?.type === 'tellthedev:init' && data?.projectId) {
-    projectId = data.projectId;
-    console.log('[TellTheDev] Widget initialized with project ID:', projectId);
+  if (data?.type === 'tellthedev:init' && data?.apiKey) {
+    apiKey = data.apiKey;
+    console.log('[TellTheDev] Widget initialized');
   }
 });
 
@@ -24,23 +24,22 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 const setFormState = (newState: typeof _formState) => {
-  _formState = newState
-  updateFormUI(newState)
-}
+  _formState = newState;
+  updateFormUI(newState);
+};
 
 const updateFormUI = (state: typeof _formState) => {
-  const submitBtn = document.querySelector("button[type='submit']") as HTMLButtonElement
-
+  const submitBtn = document.querySelector("button[type='submit']") as HTMLButtonElement;
   if (!submitBtn) return;
 
   switch (state) {
     case 'idle':
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Submit feedback'
+      submitBtn.textContent = 'Submit feedback';
       break;
     case 'loading':
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Submitting...'
+      submitBtn.textContent = 'Submitting...';
       break;
     case 'success':
       submitBtn.disabled = false;
@@ -50,10 +49,8 @@ const updateFormUI = (state: typeof _formState) => {
       submitBtn.disabled = false;
       submitBtn.textContent = 'Try Again';
       break;
-    default:
-      break;
   }
-}
+};
 
 const showErrorAlert = (message: string) => {
   const alertEl = document.getElementById("form-error-alert");
@@ -65,8 +62,7 @@ const showErrorAlert = (message: string) => {
   setTimeout(() => {
     alertEl.classList.add("hidden");
   }, 4000);
-}
-
+};
 
 const setupTypeSelector = () => {
   const typeButtons = document.querySelectorAll('[data-type]') as NodeListOf<HTMLButtonElement>;
@@ -75,7 +71,7 @@ const setupTypeSelector = () => {
     btn.addEventListener('click', () => {
       const value = btn.getAttribute('data-type');
 
-      if (value === 'bug' || value === 'feature' || value === 'general') {
+      if (value === 'bug' || value === 'idea' || value === 'praise' || value === 'general') {
         selectedType = value;
 
         typeButtons.forEach((b) => {
@@ -86,43 +82,37 @@ const setupTypeSelector = () => {
       }
     });
   });
-}
+};
 
 const setupFormSubmit = (form: HTMLFormElement) => {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    if (!projectId) {
-        alert('Widget is not initialized. No project ID.');
-        return;
+    if (!apiKey) {
+      alert('Widget is not initialized. No API key.');
+      return;
     }
 
-    await handleFormSubmission(projectId!);
+    await handleFormSubmission(apiKey);
   });
-}
+};
 
-const handleFormSubmission = async (projectId: string) => {
+const handleFormSubmission = async (apiKey: string) => {
   setFormState("loading");
 
-  const messageEl = document.querySelector("textarea") as HTMLTextAreaElement;
-  const imageEl = document.querySelector('input[type="file"]') as HTMLInputElement;
+  const contentEl = document.querySelector("textarea") as HTMLTextAreaElement;
+  const content = contentEl?.value.trim();
 
-  const messageErrorEl = document.getElementById("message-error");
-  const imageErrorEl = document.getElementById("image-error");
+  const contentErrorEl = document.getElementById("content-error");
   const typeErrorEl = document.getElementById("type-error");
 
-  // Clear previous errors
-  if (messageErrorEl) messageErrorEl.textContent = "";
-  if (imageErrorEl) imageErrorEl.textContent = "";
+  if (contentErrorEl) contentErrorEl.textContent = "";
   if (typeErrorEl) typeErrorEl.textContent = "";
-
-  const message = messageEl?.value.trim();
-  const image = imageEl.files?.[0] ?? null;
 
   let hasError = false;
 
-  if (!message) {
-    if (messageErrorEl) messageErrorEl.textContent = "Please enter a message";
+  if (!content) {
+    if (contentErrorEl) contentErrorEl.textContent = "Please enter a message";
     hasError = true;
   }
 
@@ -138,48 +128,47 @@ const handleFormSubmission = async (projectId: string) => {
   }
 
   try {
-    const formData = new FormData();
-    formData.append("projectId", projectId);
-    formData.append("type", selectedType!);
-    formData.append("message", message);
-
-    if (image) {
-      const compressedImage = await imageCompression(image, {
-        maxSizeMB: 1,
-        maxWidthOrHeight: 1280,
-        useWebWorker: true,
-      });
-      formData.append("image", compressedImage, image.name);
-    }
-
-    const response = await fetch("http://127.0.0.1:54321/functions/v1/submit-feedback", {
+    const response = await fetch(`${config.apiUrl}/submit-feedback`, {
       method: "POST",
-      body: formData,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        type: selectedType,
+        content
+      })
     });
 
     const result = await response.json();
 
     if (!response.ok) {
       setFormState("error");
-      showErrorAlert(result?.error || "Something went wrong. Please try again.");
 
+      if (result?.data?.content) {
+        if (contentErrorEl) contentErrorEl.textContent = result.data.content;
+      }
+
+      showErrorAlert(result?.message || "Something went wrong. Please try again.");
       return;
     }
 
     console.log("[TellTheDev] Submission successful:", result);
     setFormState("success");
 
-    // TODO: reset form or show success message
+    contentEl.value = "";
+    selectedType = null;
+
+    const typeButtons = document.querySelectorAll('[data-type]') as NodeListOf<HTMLButtonElement>;
+    typeButtons.forEach(btn => btn.classList.remove('bg-blue-600', 'text-white', 'hover:bg-blue-600', 'active'));
   } catch (error: unknown) {
-    console.log(error)
-    if (error instanceof Error ) {
+    if (error instanceof Error) {
       showErrorAlert(error.message || "Submission failed. Please try again.");
     }
-
     setFormState("error");
   } finally {
     setTimeout(() => {
-        setFormState('idle')
-      }, 3000);
+      setFormState('idle');
+    }, 3000);
   }
 };

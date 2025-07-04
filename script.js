@@ -1,48 +1,74 @@
 import { config } from "./config.js";
 
-const validateProject = async (projectId) => {
+const bootstrapWidget = async (apiKey) => {
   try {
-    const response = await fetch(`${config.functionsUrl}/validate-project`, {
-      method: "POST",
+    const response = await fetch(`${config.apiUrl}/bootstrap`, {
+      method: "GET",
       headers: {
-        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({ projectId }),
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`HTTP ${response.status}`);
     }
 
     const result = await response.json();
-    return result.valid === true;
-  } catch (error) {
-    console.error("[TellTheDev] Project validation failed:", error);
-    return false;
+
+    if (!result.valid) return null;
+
+    return {
+      projectId: result.projectId,
+      environment: result.environment,
+      settings: result.settings,
+    };
+  } catch (err) {
+    console.error("[TellTheDev] Bootstrap failed:", err);
+    return null;
   }
 };
 
-// Initialize the widget when the script loads
+// Initialize widget on load
 const initializeWidget = async () => {
   const currentScript =
-    document.currentScript || document.querySelector("script[data-project-id]");
-  const projectId = currentScript?.getAttribute("data-project-id");
+    document.currentScript || document.querySelector("script[data-api-key]");
+  const apiKey = currentScript?.getAttribute("data-api-key");
 
-  if (!projectId) {
-    console.warn("[TellTheDev] No project ID provided");
+  if (!apiKey) {
+    console.warn("[TellTheDev] No API key provided");
+    return;
   }
 
-  const isValid = await validateProject(projectId);
-  window.TellTheDevProjectValid = isValid;
+  const project = await bootstrapWidget(apiKey);
 
-  if (!isValid) {
-    console.warn(
-      "[TellTheDev] Invalid project ID or project validation failed"
-    );
+  if (!project) {
+    console.warn("[TellTheDev] Invalid API key. Widget not initialized.");
+    window.TellTheDev = {
+      valid: false,
+    };
+  } else {
+    window.TellTheDev = {
+      apiKey,
+      environment: project.environment,
+      settings: project.settings,
+      valid: true,
+    };
   }
 
+  renderWidget(apiKey);
+};
+
+// Mount widget and toggle button
+const renderWidget = (apiKey) => {
+  const host = document.createElement("div");
+  host.id = "tellthedev-shadow-root";
+  document.body.appendChild(host);
+
+  const shadowRoot = host.attachShadow({ mode: "open" });
+
+  // CSS styles
   const styleTag = document.createElement("style");
-  styleTag.innerHTML = `
+  styleTag.textContent = `
         .tellthedev-widget-container {
             position: fixed;
             bottom: 80px;
@@ -143,14 +169,9 @@ const initializeWidget = async () => {
             margin: 0;
         }
     `;
+  shadowRoot.appendChild(styleTag);
 
-  const host = document.createElement("div");
-  host.id = "tellthedev-shadow-root";
-  document.body.appendChild(host);
-
-  const shadowRoot = host.attachShadow({ mode: "open" });
-
-  // Create toggle button with logo icon
+  // Toggle button
   const toggleButton = document.createElement("button");
   toggleButton.className = "tellthedev-toggle-button";
   const logoIcon = document.createElement("img");
@@ -158,35 +179,36 @@ const initializeWidget = async () => {
   logoIcon.alt = "TellTheDev";
   toggleButton.appendChild(logoIcon);
 
+  // Widget container + iframe
   const container = document.createElement("div");
   container.className = "tellthedev-widget-container";
-
   const iframe = document.createElement("iframe");
   iframe.src = `${config.baseUrl}/iframe.html`;
+  // container.appendChild(iframe)
 
-  // Listen for resize messages from iframe
+  // Iframe resizing
   window.addEventListener("message", (event) => {
     if (event.data?.type === "tellthedev:resize") {
       container.style.height = `${event.data.height}px`;
     }
-    if (event.data?.type === "tellthedev:init" && event.data?.projectId) {
-      projectId = event.data.projectId;
+    if (event.data?.type === "tellthedev:init" && event.data?.apiKey) {
+      apiKey = event.data.apiKey;
       console.log(
-        "[TellTheDev] Widget initialized with project ID:",
-        projectId
+        "[TellTheDev] Widget initialized with API Key:",
+        apiKey
       );
     }
   });
 
   iframe.onload = () => {
     iframe.contentWindow?.postMessage(
-      { type: "tellthedev:init", projectId },
+      { type: "tellthedev:init", apiKey },
       "*"
     );
   };
 
   toggleButton.addEventListener("click", () => {
-    if (window.TellTheDevProjectValid) {
+    if (window.TellTheDev.valid) {
       const isVisible = container.classList.contains("show");
       if (isVisible) {
         container.classList.remove("show");
@@ -230,5 +252,4 @@ const initializeWidget = async () => {
   shadowRoot.appendChild(container);
 };
 
-// Initialize the widget
 initializeWidget();

@@ -1,21 +1,12 @@
-"use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
+import { config } from "./config.js";
 let _formState = 'idle';
-let projectId = "8d62d581-6853-49be-b788-e317c297509e";
+let apiKey = null;
 let selectedType = null;
 window.addEventListener('message', (event) => {
     const { data } = event;
-    if ((data === null || data === void 0 ? void 0 : data.type) === 'tellthedev:init' && (data === null || data === void 0 ? void 0 : data.projectId)) {
-        projectId = data.projectId;
-        console.log('[TellTheDev] Widget initialized with project ID:', projectId);
+    if ((data === null || data === void 0 ? void 0 : data.type) === 'tellthedev:init' && (data === null || data === void 0 ? void 0 : data.apiKey)) {
+        apiKey = data.apiKey;
+        console.log('[TellTheDev] Widget initialized');
     }
 });
 document.addEventListener('DOMContentLoaded', () => {
@@ -51,8 +42,6 @@ const updateFormUI = (state) => {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Try Again';
             break;
-        default:
-            break;
     }
 };
 const showErrorAlert = (message) => {
@@ -70,7 +59,7 @@ const setupTypeSelector = () => {
     typeButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
             const value = btn.getAttribute('data-type');
-            if (value === 'bug' || value === 'feature' || value === 'general') {
+            if (value === 'bug' || value === 'idea' || value === 'praise' || value === 'general') {
                 selectedType = value;
                 typeButtons.forEach((b) => {
                     b.classList.remove('bg-blue-600', 'text-white', 'hover:bg-blue-600');
@@ -81,36 +70,30 @@ const setupTypeSelector = () => {
     });
 };
 const setupFormSubmit = (form) => {
-    form.addEventListener('submit', (e) => __awaiter(void 0, void 0, void 0, function* () {
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        // if (!projectId) {
-        //     alert('Widget is not initialized. No project ID.');
-        //     return;
-        // }
-        yield handleFormSubmission(projectId);
-    }));
+        if (!apiKey) {
+            alert('Widget is not initialized. No API key.');
+            return;
+        }
+        await handleFormSubmission(apiKey);
+    });
 };
-const handleFormSubmission = (projectId) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+const handleFormSubmission = async (apiKey) => {
+    var _a;
     setFormState("loading");
-    const messageEl = document.querySelector("textarea");
-    const imageEl = document.querySelector('input[type="file"]');
-    const messageErrorEl = document.getElementById("message-error");
-    const imageErrorEl = document.getElementById("image-error");
+    const contentEl = document.querySelector("textarea");
+    const content = contentEl === null || contentEl === void 0 ? void 0 : contentEl.value.trim();
+    const contentErrorEl = document.getElementById("content-error");
     const typeErrorEl = document.getElementById("type-error");
-    // Clear previous errors
-    if (messageErrorEl)
-        messageErrorEl.textContent = "";
-    if (imageErrorEl)
-        imageErrorEl.textContent = "";
+    if (contentErrorEl)
+        contentErrorEl.textContent = "";
     if (typeErrorEl)
         typeErrorEl.textContent = "";
-    const message = messageEl === null || messageEl === void 0 ? void 0 : messageEl.value.trim();
-    const image = (_b = (_a = imageEl.files) === null || _a === void 0 ? void 0 : _a[0]) !== null && _b !== void 0 ? _b : null;
     let hasError = false;
-    if (!message) {
-        if (messageErrorEl)
-            messageErrorEl.textContent = "Please enter a message";
+    if (!content) {
+        if (contentErrorEl)
+            contentErrorEl.textContent = "Please enter a message";
         hasError = true;
     }
     if (!selectedType) {
@@ -124,31 +107,35 @@ const handleFormSubmission = (projectId) => __awaiter(void 0, void 0, void 0, fu
         return;
     }
     try {
-        const formData = new FormData();
-        formData.append("projectId", projectId);
-        formData.append("type", selectedType);
-        formData.append("message", message);
-        if (image) {
-            const compressedImage = yield imageCompression(image, {
-                maxSizeMB: 1,
-                maxWidthOrHeight: 1280,
-                useWebWorker: true,
-            });
-            formData.append("image", compressedImage, image.name);
-        }
-        const response = yield fetch("http://127.0.0.1:54321/functions/v1/submit-feedback", {
+        const response = await fetch(`${config.apiUrl}/submit-feedback`, {
             method: "POST",
-            body: formData,
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                type: selectedType,
+                content
+            })
         });
-        const result = yield response.json();
+        const result = await response.json();
+        console.log(result, response.ok);
         if (!response.ok) {
             setFormState("error");
-            showErrorAlert((result === null || result === void 0 ? void 0 : result.error) || "Something went wrong. Please try again.");
+            console.log(result);
+            if ((_a = result === null || result === void 0 ? void 0 : result.data) === null || _a === void 0 ? void 0 : _a.content) {
+                if (contentErrorEl)
+                    contentErrorEl.textContent = result.data.content;
+            }
+            showErrorAlert((result === null || result === void 0 ? void 0 : result.message) || "Something went wrong. Please try again.");
             return;
         }
         console.log("[TellTheDev] Submission successful:", result);
         setFormState("success");
-        // TODO: reset form or show success message
+        contentEl.value = "";
+        selectedType = null;
+        const typeButtons = document.querySelectorAll('[data-type]');
+        typeButtons.forEach(btn => btn.classList.remove('bg-blue-600', 'text-white', 'hover:bg-blue-600', 'active'));
     }
     catch (error) {
         console.log(error);
@@ -162,4 +149,4 @@ const handleFormSubmission = (projectId) => __awaiter(void 0, void 0, void 0, fu
             setFormState('idle');
         }, 3000);
     }
-});
+};
