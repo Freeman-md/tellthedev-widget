@@ -119,10 +119,8 @@ const handleFormSubmission = async (apiKey) => {
             })
         });
         const result = await response.json();
-        console.log(result, response.ok);
         if (!response.ok) {
             setFormState("error");
-            console.log(result);
             if ((_a = result === null || result === void 0 ? void 0 : result.data) === null || _a === void 0 ? void 0 : _a.content) {
                 if (contentErrorEl)
                     contentErrorEl.textContent = result.data.content;
@@ -138,7 +136,6 @@ const handleFormSubmission = async (apiKey) => {
         typeButtons.forEach(btn => btn.classList.remove('bg-blue-600', 'text-white', 'hover:bg-blue-600', 'active'));
     }
     catch (error) {
-        console.log(error);
         if (error instanceof Error) {
             showErrorAlert(error.message || "Submission failed. Please try again.");
         }
