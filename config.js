@@ -16,7 +16,7 @@ export const config = {
   },
 
   assets: {
-    logoIcon: "/assets/images/logo-icon-white.svg",
-    logo: "/assets/images/logo.svg",
+    logoIcon: "https://tellthedev.vercel.app/widget/assets/images/logo-icon-white.svg",
+    logo: "https://tellthedev.vercel.app/widget/assets/images/logo.svg",
   },
 };
