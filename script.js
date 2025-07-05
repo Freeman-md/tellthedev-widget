@@ -183,8 +183,7 @@ const renderWidget = (apiKey) => {
   const container = document.createElement("div");
   container.className = "tellthedev-widget-container";
   const iframe = document.createElement("iframe");
-  iframe.src = `${config.baseUrl}/iframe.html`;
-  // container.appendChild(iframe)
+  iframe.src = `./iframe.html`;
 
   // Iframe resizing
   window.addEventListener("message", (event) => {
